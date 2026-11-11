@@ -27,7 +27,7 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
 .hero .snow i{position:absolute;top:-10px;width:5px;height:5px;border-radius:50%;background:#fff;opacity:.7;animation:fall linear infinite}
 @keyframes fall{to{transform:translateY(240px)}}
 .note{margin-top:12px;background:var(--card);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow);font-size:14px;display:flex;gap:10px;align-items:center}
-.note b{display:block}.note .btn{margin-left:auto}
+.note .btn{white-space:nowrap;flex:none}.note b{display:block}.note .btn{margin-left:auto}
 .cal{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
 @media(min-width:700px){.cal{grid-template-columns:repeat(6,1fr);gap:14px}}
 @media(min-width:1100px){.cal{grid-template-columns:repeat(8,1fr)}}
@@ -106,7 +106,15 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
   function nDone() { return Object.keys(done()).length + Object.keys(T.d).length; }
   function setPeek(on) { S.peek = on; if (!on) T = { o: {}, d: {} }; save(); }
   function tidy() { if (!S) return; S.peek = false; var t = today(), o = opened(), d = done(); Object.keys(o).forEach(function (k) { if (+k > t) delete o[k]; }); Object.keys(d).forEach(function (k) { if (+k > t) delete d[k]; }); save(); }
-  function act(n) { var e = (S.edits || {})[S.set] || {}; return e[n] || D.sets[S.set].items[n - 1]; }
+  // Each year's calendar gets its own mix: activities for days 1-23 are shuffled (24 stays the Christmas Eve one), and so are the jokes.
+  function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function range(n) { var a = []; for (var i = 0; i < n; i++) a.push(i); return a; }
+  function newMix() { return { a: shuffle(range(23)).concat([23]), j: shuffle(range(24)) }; }
+  function mix() { S.mix = S.mix || {}; if (!S.mix[year()]) { S.mix[year()] = newMix(); save(); } return S.mix[year()]; }
+  function remix() { var m = mix(), o = opened(), free = range(23).filter(function (i) { return !o[i + 1]; }), va = shuffle(free.map(function (i) { return m.a[i]; })), vj = shuffle(free.map(function (i) { return m.j[i]; }));
+    free.forEach(function (i, k) { m.a[i] = va[k]; m.j[i] = vj[k]; }); save(); }
+  function act(n) { var e = (S.edits || {})[S.set] || {}; return e[n] || D.sets[S.set].items[mix().a[n - 1]]; }
+  function joke(n) { return D.jokes[mix().j[n - 1]]; }
   function setLook() { var l = S && S.look || "auto"; if (l === "auto") l = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; document.documentElement.setAttribute("data-look", l); }
   function standalone() { return matchMedia("(display-mode: standalone)").matches || navigator.standalone; }
   var I = { gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>' };
@@ -136,12 +144,13 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
       return '<button class="' + cls + '" data-a="door" data-v="' + n + '" aria-label="Door ' + n + '"><div class="back"><span class="n2">' + n + '</span>' + D.art[D.artIdx[n - 1]] + (isDone(n) ? '<span class="ok">✓</span>' : "") + '</div>' +
         '<div class="lid"><span class="n">' + n + '</span>' + (!canOpen(n) ? '<span class="lk">' + (t === 0 || n > t ? "soon" : "") + '</span>' : "") + '</div></button>';
     }).join("");
+    var hnote = flag("noHelp", null) ? "" : '<div class="note"><div><b>How to use it</b>Open one door a day, from 1 to 24 December. Do the activity together, then tap We did it!</div><button class="btn sm alt" data-a="help">Show me</button><button class="x" data-a="no-help" aria-label="Hide" style="flex:none">×</button></div>';
     var inote = (standalone() || flag("noInstall", null)) ? "" : '<div class="note"><div><b>Put the app on your home screen</b>Opens like a normal app and works with no signal.</div><button class="btn sm" data-a="install">Install</button><button class="x" data-a="no-install" aria-label="Hide" style="flex:none">×</button></div>';
     var peek = S.peek ? '<div class="note"><div><b>Preview mode is on</b>Every door opens so you can look around. Doors you open early close again when you turn it off or open the app again.</div><button class="btn sm alt" data-a="peek-off">Turn off</button></div>' : "";
     var smp = SY ? '<div class="note" style="background:#FBF1D9;color:#2A1F1A"><div><b>This is a sample</b>Pretend it is 14 December. Look around, open doors, tick them. Nothing is saved.</div><button class="btn sm" data-a="sample-off">' + (REAL ? "Back to ours" : "Start ours") + '</button></div>' : "";
     var pre = (!S.peek && t === 0) ? '<div class="note"><div><b>Want a look first?</b>Preview mode lets you open every door now.</div><button class="btn sm alt" data-a="peek-on">Preview</button></div>' : "";
     $app.innerHTML = '<div class="wrap"><header class="top"><svg viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><defs><linearGradient id="lgA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--h1)"/><stop offset="1" stop-color="var(--h2)"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(#lgA)"/><rect x="27" y="34" width="46" height="50" rx="7" fill="#FBF6EC"/><path d="M27 41a7 7 0 0 1 7-7h28v50H34a7 7 0 0 1-7-7Z" fill="#B8323F"/><rect x="31" y="38" width="27" height="42" rx="4" fill="none" stroke="#E9C27A" stroke-width="2.5"/><circle cx="54" cy="60" r="2.6" fill="#E9C27A"/><path d="M50 13l3.5 7.2 7.9 1.1-5.7 5.6 1.3 7.9-7-3.7-7 3.7 1.3-7.9-5.7-5.6 7.9-1.1Z" fill="#E9C27A"/></svg><b>Advent Calendar</b><span class="sp"></span><button class="ib" data-a="settings" aria-label="Settings">' + I.gear + '</button></header>' +
-      hero() + smp + (SY ? "" : peek + pre + inote) + '<div class="cal">' + cal + '</div><div class="foot">Doors open on their day in December. Tap a door to open it.</div></div>';
+      hero() + smp + (SY ? "" : peek + hnote + pre + inote) + '<div class="cal">' + cal + '</div><div class="foot">Doors open on their day in December. Tap a door to open it.</div></div>';
   }
   function sheet(html) { close(); var b = document.createElement("div"); b.className = "sheetbg"; b.innerHTML = '<div class="sheet" role="dialog">' + html + '</div>'; b.addEventListener("click", function (e) { if (e.target === b) close(); }); document.body.appendChild(b); }
   function close() { var b = document.querySelector(".sheetbg"); if (b) b.remove(); }
@@ -152,7 +161,7 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
     el.insertAdjacentHTML("beforeend", h + "</div>");
   }
   function openDay(n) {
-    var j = D.jokes[n - 1], dn = isDone(n);
+    var j = joke(n), dn = isDone(n);
     sheet('<div class="day"><div class="hd"><h2>Day ' + n + '</h2><button class="x" data-a="close" aria-label="Close">×</button></div><div class="pic">' + D.art[D.artIdx[n - 1]].replace('class="art', 'class="art big') + '</div>' +
       '<div class="lab">Today\'s ' + (S.set === "kind" ? "kind act" : "activity") + '</div><div class="act">' + esc(act(n)) + '</div>' +
       '<div class="card joke"><div class="q">' + esc(j[0]) + '</div><div class="a" hidden>' + esc(j[1]) + '</div><button class="btn sm alt" data-a="joke" style="margin-top:10px">Show the answer</button></div>' +
@@ -171,7 +180,8 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
       '<div class="sw"><div class="t"><b>Preview mode</b><span>Look behind every door now. Doors you open early close again afterwards.</span></div><button class="tg ' + (S.peek ? "on" : "") + '" data-a="peek" aria-label="Preview mode"></button></div>' +
       '<div class="card"><b>Backup</b><p class="small muted" style="margin:4px 0 10px">Your calendar lives only on this device. Save a backup file to move it to another phone or computer.</p><div class="row" style="margin-top:0"><button class="btn sm alt" data-a="backup">Save backup</button><label class="btn sm alt">Restore<input type="file" accept=".json" id="restore" hidden></label></div></div>' +
       (SY ? "" : '<div class="card"><b>See a sample</b><p class="small muted" style="margin:4px 0 10px">See how the calendar looks in the middle of December. Your own calendar is not touched.</p><button class="btn sm alt" data-a="sample">See a sample</button></div>') + '<div class="card"><b>Install</b><p class="small muted" style="margin:4px 0 10px">Put the app on your home screen. It opens like a normal app and works with no signal.</p><button class="btn sm" data-a="install">Install the app</button></div>' +
-      '<div class="card"><b>Start again</b><p class="small muted" style="margin:4px 0 10px">Closes all the doors and clears what you ticked this year. Your changes to the activities stay.</p><button class="btn sm red" data-a="restart">Close all the doors</button></div>' +
+      '<div class="card"><b>Mix the activities</b><p class="small muted" style="margin:4px 0 10px">Every calendar gets its own mixed-up order. Mix again to shuffle the doors you haven\'t opened yet. Door 24 always stays the Christmas Eve one.</p><div class="row" style="margin-top:0"><button class="btn sm alt" data-a="remix">Mix them again</button><button class="btn sm alt" data-a="help">How it works</button></div></div>' +
+      '<div class="card"><b>Start again</b><p class="small muted" style="margin:4px 0 10px">Closes all the doors, clears what you ticked this year and mixes the activities again. Your own changes stay.</p><button class="btn sm red" data-a="restart">Close all the doors</button></div>' +
       '<p class="small muted" style="margin-top:14px;text-align:center">Works offline. No account. Nothing is sent anywhere.</p>');
   }
   function render() { setLook(); if (!S) welcome(); else home(); }
@@ -194,9 +204,19 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
     if (a === "look") { S.look = v; save(); setLook(); settings(); return; }
     if (a === "peek") { setPeek(!S.peek); settings(); home(); return; }
     if (a === "peek-on" || a === "peek-off") { setPeek(a === "peek-on"); home(); return; }
-    if (a === "restart") { if (!confirm("Close all the doors and clear this year's ticks?")) return; S.done[year()] = {}; S.opened[year()] = {}; save(); close(); home(); toast("All the doors are closed again."); return; }
+    if (a === "restart") { if (!confirm("Close all the doors and clear this year's ticks?")) return; S.done[year()] = {}; S.opened[year()] = {}; S.mix = S.mix || {}; S.mix[year()] = newMix(); T = { o: {}, d: {} }; save(); close(); home(); toast("All the doors are closed again."); return; }
     if (a === "backup") { var bl = new Blob([JSON.stringify(S, null, 1)], { type: "application/json" }), u = URL.createObjectURL(bl), l = document.createElement("a"); l.href = u; l.download = "advent-calendar-backup.json"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
     if (a === "no-install") { flag("noInstall"); home(); return; }
+    if (a === "no-help") { flag("noHelp"); home(); return; }
+    if (a === "remix") { remix(); toast("Mixed! The closed doors have new activities and jokes."); return; }
+    if (a === "help") { sheet('<div class="hd"><h2>How it works</h2><button class="x" data-a="close" aria-label="Close">×</button></div><div class="card" style="margin-top:0"><ol style="padding-left:20px;line-height:1.5">' +
+      ["<b>One door a day.</b> Each door opens on its day, from 1 to 24 December. Today's door glows gold.", "<b>Tap the door</b> to open it. Behind it is an activity to do together and a Christmas joke. Tap <b>Show the answer</b> when everyone has guessed.",
+       "<b>Did it?</b> Tap <b>We did it!</b> The door gets a tick and the bar at the top fills up to Christmas.", "<b>Busy day?</b> Tap <b>Change</b> to write your own idea for that door.",
+       "<b>Choose the set</b> in Settings: Family fun, Little ones or Acts of kindness. The activities come in a mixed-up order, and you can mix them again.",
+       "<b>Before December,</b> it counts down the days. Tap <b>See a sample</b> in Settings, or turn on <b>Preview mode</b>, to look around.",
+       "<b>Put it on your home screen</b> so it opens like a normal app and works with no signal."].map(function (x) { return '<li style="margin-bottom:8px">' + x + '</li>'; }).join("") +
+      '</ol></div><button class="btn wide" data-a="got-help">Got it</button>'); return; }
+    if (a === "got-help") { flag("noHelp"); close(); home(); return; }
     if (a === "install") { if (window.__bip) { window.__bip.prompt(); window.__bip.userChoice.then(function () { window.__bip = null; }); return; }
       sheet('<div class="hd"><h2>Install the app</h2><button class="x" data-a="close" aria-label="Close">×</button></div><div class="card"><p style="margin-top:0"><b>On a phone:</b> open the browser menu (three dots or the share button) and choose <b>Add to Home screen</b> or <b>Install app</b>.</p>' +
         '<p style="margin:10px 0 0"><b>On a computer (Chrome or Edge):</b> click the install icon at the right end of the address bar, or the three-dot menu, then <b>Install</b>.</p></div>'); return; }
@@ -210,7 +230,7 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", setLook);
   window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); window.__bip = e; });
   window.addEventListener("appinstalled", function () { flag("installed"); });
-  window.__adv = { state: function () { return S; }, render: render };
+  window.__adv = { state: function () { return S; }, render: render, act: function (n) { return act(n); }, joke: function (n) { return joke(n); } };
   tidy(); render();
   if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
     var hadSW = !!navigator.serviceWorker.controller, reloaded = false;
