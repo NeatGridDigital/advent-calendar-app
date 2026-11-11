@@ -85,11 +85,12 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
 (function () {
   "use strict";
   var KEY = "advent-calendar-app-v1", D = window.ADV, $app = document.getElementById("app");
-  var now = function () { return window.__now ? new Date(window.__now) : new Date(); };
+  var REAL = null, SY = 0; // sample mode: REAL keeps the real calendar (or null), nothing is saved, today is 14 December
+  var now = function () { if (SY) return new Date(SY, 11, 14, 10); return window.__now ? new Date(window.__now) : new Date(); };
   function flag(k, v) { try { if (v === null) return localStorage.getItem("adv-" + k); localStorage.setItem("adv-" + k, v || "1"); } catch (e) { return null; } }
   function load() { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch (e) { return null; } }
   var S = load();
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+  function save() { if (SY) return; try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
   function esc(t) { return String(t).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
   function year() { var d = now(); return d.getMonth() === 0 && d.getDate() < 7 ? d.getFullYear() - 1 : d.getFullYear(); }
   function today() { var d = now(); return d.getMonth() === 11 && d.getFullYear() === year() ? d.getDate() : (d.getMonth() < 11 && d.getFullYear() === year() ? 0 : 99); }
@@ -97,6 +98,14 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
   function done() { S.done = S.done || {}; return S.done[year()] = S.done[year()] || {}; }
   function opened() { S.opened = S.opened || {}; return S.opened[year()] = S.opened[year()] || {}; }
   function canOpen(n) { return S.peek || n <= today(); }
+  // Doors opened early in Preview mode are only a look: they are kept in memory, never saved, and close again.
+  var T = { o: {}, d: {} };
+  function isOpen(n) { return !!(opened()[n] || T.o[n]); }
+  function isDone(n) { return !!(done()[n] || T.d[n]); }
+  function early(n) { return n > today(); }
+  function nDone() { return Object.keys(done()).length + Object.keys(T.d).length; }
+  function setPeek(on) { S.peek = on; if (!on) T = { o: {}, d: {} }; save(); }
+  function tidy() { if (!S) return; S.peek = false; var t = today(), o = opened(), d = done(); Object.keys(o).forEach(function (k) { if (+k > t) delete o[k]; }); Object.keys(d).forEach(function (k) { if (+k > t) delete d[k]; }); save(); }
   function act(n) { var e = (S.edits || {})[S.set] || {}; return e[n] || D.sets[S.set].items[n - 1]; }
   function setLook() { var l = S && S.look || "auto"; if (l === "auto") l = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; document.documentElement.setAttribute("data-look", l); }
   function standalone() { return matchMedia("(display-mode: standalone)").matches || navigator.standalone; }
@@ -108,12 +117,12 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
     $app.innerHTML = '<div class="wrap"><div class="welcome"><svg viewBox="0 0 100 100" width="96" height="96" aria-hidden="true"><defs><linearGradient id="lgA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--h1)"/><stop offset="1" stop-color="var(--h2)"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="url(#lgA)"/><rect x="27" y="34" width="46" height="50" rx="7" fill="#FBF6EC"/><path d="M27 41a7 7 0 0 1 7-7h28v50H34a7 7 0 0 1-7-7Z" fill="#B8323F"/><rect x="31" y="38" width="27" height="42" rx="4" fill="none" stroke="#E9C27A" stroke-width="2.5"/><circle cx="54" cy="60" r="2.6" fill="#E9C27A"/><path d="M50 13l3.5 7.2 7.9 1.1-5.7 5.6 1.3 7.9-7-3.7-7 3.7 1.3-7.9-5.7-5.6 7.9-1.1Z" fill="#E9C27A"/></svg><h1>Our Advent Calendar</h1><p>A little door to open every day from 1 to 24 December, with a family activity and a joke behind each one.</p>' +
       '<div class="box"><div class="fld" style="margin-top:0"><label for="w-name">Your family name (optional)</label><input id="w-name" placeholder="The Lees" maxlength="40"></div>' +
       '<div class="fld"><label>What is behind the doors?</label>' + setSeg("family") + '</div>' +
-      '<button class="btn wide" data-a="begin">Start our calendar</button></div><p class="small" style="margin-top:16px">Works offline. No account. Everything stays on this device.</p></div></div>';
+      '<button class="btn wide" data-a="begin">Start our calendar</button><button class="btn alt wide" data-a="sample" style="margin-top:10px">See a sample first</button></div><p class="small" style="margin-top:16px">Works offline. No account. Everything stays on this device.</p></div></div>';
   }
   function setSeg(cur) { return '<div class="seg">' + Object.keys(D.sets).map(function (k) { return '<button data-a="set" data-v="' + k + '" class="' + (k === cur ? "on" : "") + '">' + D.sets[k].name + '</button>'; }).join("") + "</div>"; }
 
   function hero() {
-    var t = today(), n = Object.keys(done()).length, msg, k;
+    var t = today(), n = nDone(), msg, k;
     if (t === 0) { k = "Countdown"; msg = daysTo(1) === 1 ? "Door 1 opens tomorrow!" : "Door 1 opens in " + daysTo(1) + " days"; }
     else if (t <= 24) { k = t + " December"; msg = t === 24 ? "Christmas Eve! The last door is open." : (25 - t) + (25 - t === 1 ? " sleep" : " sleeps") + " to Christmas"; }
     else { k = "Christmas"; msg = "Merry Christmas! All the doors are open."; }
@@ -121,17 +130,18 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
     return '<div class="hero"><div class="snow">' + snow + '</div><div class="k">' + esc(S.name ? S.name + " · " : "") + k + '</div><h1>' + msg + '</h1><p>' + n + ' of 24 done' + (n ? " · keep going!" : "") + '</p><div class="bar"><i style="width:' + (n / 24 * 100) + '%"></i></div></div>';
   }
   function home() {
-    var t = today(), o = opened(), dn = done();
+    var t = today();
     var cal = D.order.map(function (n) {
-      var cls = "door c" + (n % 4) + (o[n] ? " open" : "") + (n === t && !o[n] ? " today" : "") + (!canOpen(n) ? " locked" : "");
-      return '<button class="' + cls + '" data-a="door" data-v="' + n + '" aria-label="Door ' + n + '"><div class="back"><span class="n2">' + n + '</span>' + D.art[D.artIdx[n - 1]] + (dn[n] ? '<span class="ok">✓</span>' : "") + '</div>' +
+      var cls = "door c" + (n % 4) + (isOpen(n) ? " open" : "") + (n === t && !isOpen(n) ? " today" : "") + (!canOpen(n) ? " locked" : "");
+      return '<button class="' + cls + '" data-a="door" data-v="' + n + '" aria-label="Door ' + n + '"><div class="back"><span class="n2">' + n + '</span>' + D.art[D.artIdx[n - 1]] + (isDone(n) ? '<span class="ok">✓</span>' : "") + '</div>' +
         '<div class="lid"><span class="n">' + n + '</span>' + (!canOpen(n) ? '<span class="lk">' + (t === 0 || n > t ? "soon" : "") + '</span>' : "") + '</div></button>';
     }).join("");
     var inote = (standalone() || flag("noInstall", null)) ? "" : '<div class="note"><div><b>Put the app on your home screen</b>Opens like a normal app and works with no signal.</div><button class="btn sm" data-a="install">Install</button><button class="x" data-a="no-install" aria-label="Hide" style="flex:none">×</button></div>';
-    var peek = S.peek ? '<div class="note"><div><b>Preview mode is on</b>Every door opens, so you can look around. Turn it off in Settings before 1 December.</div><button class="btn sm alt" data-a="peek-off">Turn off</button></div>' : "";
+    var peek = S.peek ? '<div class="note"><div><b>Preview mode is on</b>Every door opens so you can look around. Doors you open early close again when you turn it off or open the app again.</div><button class="btn sm alt" data-a="peek-off">Turn off</button></div>' : "";
+    var smp = SY ? '<div class="note" style="background:#FBF1D9;color:#2A1F1A"><div><b>This is a sample</b>Pretend it is 14 December. Look around, open doors, tick them. Nothing is saved.</div><button class="btn sm" data-a="sample-off">' + (REAL ? "Back to ours" : "Start ours") + '</button></div>' : "";
     var pre = (!S.peek && t === 0) ? '<div class="note"><div><b>Want a look first?</b>Preview mode lets you open every door now.</div><button class="btn sm alt" data-a="peek-on">Preview</button></div>' : "";
     $app.innerHTML = '<div class="wrap"><header class="top"><svg viewBox="0 0 100 100" width="30" height="30" aria-hidden="true"><defs><linearGradient id="lgA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="var(--h1)"/><stop offset="1" stop-color="var(--h2)"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(#lgA)"/><rect x="27" y="34" width="46" height="50" rx="7" fill="#FBF6EC"/><path d="M27 41a7 7 0 0 1 7-7h28v50H34a7 7 0 0 1-7-7Z" fill="#B8323F"/><rect x="31" y="38" width="27" height="42" rx="4" fill="none" stroke="#E9C27A" stroke-width="2.5"/><circle cx="54" cy="60" r="2.6" fill="#E9C27A"/><path d="M50 13l3.5 7.2 7.9 1.1-5.7 5.6 1.3 7.9-7-3.7-7 3.7 1.3-7.9-5.7-5.6 7.9-1.1Z" fill="#E9C27A"/></svg><b>Advent Calendar</b><span class="sp"></span><button class="ib" data-a="settings" aria-label="Settings">' + I.gear + '</button></header>' +
-      hero() + peek + pre + inote + '<div class="cal">' + cal + '</div><div class="foot">Doors open on their day in December. Tap a door to open it.</div></div>';
+      hero() + smp + (SY ? "" : peek + pre + inote) + '<div class="cal">' + cal + '</div><div class="foot">Doors open on their day in December. Tap a door to open it.</div></div>';
   }
   function sheet(html) { close(); var b = document.createElement("div"); b.className = "sheetbg"; b.innerHTML = '<div class="sheet" role="dialog">' + html + '</div>'; b.addEventListener("click", function (e) { if (e.target === b) close(); }); document.body.appendChild(b); }
   function close() { var b = document.querySelector(".sheetbg"); if (b) b.remove(); }
@@ -142,7 +152,7 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
     el.insertAdjacentHTML("beforeend", h + "</div>");
   }
   function openDay(n) {
-    var j = D.jokes[n - 1], dn = done()[n];
+    var j = D.jokes[n - 1], dn = isDone(n);
     sheet('<div class="day"><div class="hd"><h2>Day ' + n + '</h2><button class="x" data-a="close" aria-label="Close">×</button></div><div class="pic">' + D.art[D.artIdx[n - 1]].replace('class="art', 'class="art big') + '</div>' +
       '<div class="lab">Today\'s ' + (S.set === "kind" ? "kind act" : "activity") + '</div><div class="act">' + esc(act(n)) + '</div>' +
       '<div class="card joke"><div class="q">' + esc(j[0]) + '</div><div class="a" hidden>' + esc(j[1]) + '</div><button class="btn sm alt" data-a="joke" style="margin-top:10px">Show the answer</button></div>' +
@@ -158,9 +168,9 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
       '<div class="fld"><label for="s-name">Family name</label><input id="s-name" value="' + esc(S.name || "") + '" placeholder="The Lees" maxlength="40"></div>' +
       '<div class="fld"><label>What is behind the doors?</label>' + setSeg(S.set) + '</div>' +
       '<div class="fld"><label>Look</label><div class="seg">' + ["auto", "light", "dark"].map(function (l) { return '<button data-a="look" data-v="' + l + '" class="' + ((S.look || "auto") === l ? "on" : "") + '">' + { auto: "Auto", light: "Light", dark: "Dark" }[l] + '</button>'; }).join("") + '</div></div>' +
-      '<div class="sw"><div class="t"><b>Preview mode</b><span>Open every door now, to look around or catch up.</span></div><button class="tg ' + (S.peek ? "on" : "") + '" data-a="peek" aria-label="Preview mode"></button></div>' +
+      '<div class="sw"><div class="t"><b>Preview mode</b><span>Look behind every door now. Doors you open early close again afterwards.</span></div><button class="tg ' + (S.peek ? "on" : "") + '" data-a="peek" aria-label="Preview mode"></button></div>' +
       '<div class="card"><b>Backup</b><p class="small muted" style="margin:4px 0 10px">Your calendar lives only on this device. Save a backup file to move it to another phone or computer.</p><div class="row" style="margin-top:0"><button class="btn sm alt" data-a="backup">Save backup</button><label class="btn sm alt">Restore<input type="file" accept=".json" id="restore" hidden></label></div></div>' +
-      '<div class="card"><b>Install</b><p class="small muted" style="margin:4px 0 10px">Put the app on your home screen. It opens like a normal app and works with no signal.</p><button class="btn sm" data-a="install">Install the app</button></div>' +
+      (SY ? "" : '<div class="card"><b>See a sample</b><p class="small muted" style="margin:4px 0 10px">See how the calendar looks in the middle of December. Your own calendar is not touched.</p><button class="btn sm alt" data-a="sample">See a sample</button></div>') + '<div class="card"><b>Install</b><p class="small muted" style="margin:4px 0 10px">Put the app on your home screen. It opens like a normal app and works with no signal.</p><button class="btn sm" data-a="install">Install the app</button></div>' +
       '<div class="card"><b>Start again</b><p class="small muted" style="margin:4px 0 10px">Closes all the doors and clears what you ticked this year. Your changes to the activities stay.</p><button class="btn sm red" data-a="restart">Close all the doors</button></div>' +
       '<p class="small muted" style="margin-top:14px;text-align:center">Works offline. No account. Nothing is sent anywhere.</p>');
   }
@@ -171,17 +181,19 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
     if (a === "set") { b.parentNode.querySelectorAll("button").forEach(function (x) { x.classList.toggle("on", x === b); }); if (S) { S.set = v; save(); home(); } return; }
     if (a === "begin") { var nm = document.getElementById("w-name").value.trim(), on = document.querySelector(".seg .on"); S = { name: nm, set: on ? on.dataset.v : "family", look: "auto", peek: false, done: {}, opened: {}, edits: {} }; save(); render(); return; }
     if (a === "door") { var n = +v; if (!canOpen(n)) { toast(today() === 0 || n > today() ? "Door " + n + " opens on " + n + " December. Not long now!" : ""); return; }
-      if (!opened()[n]) { opened()[n] = 1; save(); b.classList.add("open"); b.classList.remove("today"); setTimeout(function () { openDay(n); }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700); } else openDay(n); return; }
+      if (!isOpen(n)) { if (early(n)) T.o[n] = 1; else { opened()[n] = 1; save(); } b.classList.add("open"); b.classList.remove("today"); setTimeout(function () { openDay(n); }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700); } else openDay(n); return; }
     if (a === "close") { close(); home(); return; }
     if (a === "joke") { var q = b.parentNode.querySelector(".a"); q.hidden = false; b.remove(); return; }
-    if (a === "did") { var d = done(); if (d[v]) delete d[v]; else { d[v] = 1; toast(Object.keys(d).length === 24 ? "All 24 done. Merry Christmas!" : "Well done! ⭐"); } save(); openDay(+v); home(); return; }
+    if (a === "did") { var d = early(+v) ? T.d : done(); if (d[v]) delete d[v]; else { d[v] = 1; toast(nDone() === 24 ? "All 24 done. Merry Christmas!" : "Well done! ⭐"); } save(); openDay(+v); home(); return; }
     if (a === "edit") { editDay(+v); return; }
     if (a === "save-edit") { var t = document.getElementById("f-act").value.trim(); S.edits = S.edits || {}; S.edits[S.set] = S.edits[S.set] || {}; if (t) S.edits[S.set][v] = t; save(); openDay(+v); return; }
     if (a === "reset-edit") { if (S.edits && S.edits[S.set]) delete S.edits[S.set][v]; save(); openDay(+v); return; }
+    if (a === "sample") { var y = year(), o = {}, d = {}; for (var i = 1; i <= 13; i++) { o[i] = 1; if (i <= 11 && i !== 8) d[i] = 1; } REAL = S; SY = y; S = { name: "The Lees", set: S ? S.set : (document.querySelector(".seg .on") || {dataset: {v: "family"}}).dataset.v, look: REAL ? REAL.look : "auto", peek: false, done: {}, opened: {}, edits: {} }; S.done[y] = d; S.opened[y] = o; T = { o: {}, d: {} }; close(); render(); window.scrollTo(0, 0); return; }
+    if (a === "sample-off") { SY = 0; S = REAL; REAL = null; T = { o: {}, d: {} }; close(); render(); window.scrollTo(0, 0); return; }
     if (a === "settings") { settings(); return; }
     if (a === "look") { S.look = v; save(); setLook(); settings(); return; }
-    if (a === "peek") { S.peek = !S.peek; save(); settings(); home(); return; }
-    if (a === "peek-on" || a === "peek-off") { S.peek = a === "peek-on"; save(); home(); return; }
+    if (a === "peek") { setPeek(!S.peek); settings(); home(); return; }
+    if (a === "peek-on" || a === "peek-off") { setPeek(a === "peek-on"); home(); return; }
     if (a === "restart") { if (!confirm("Close all the doors and clear this year's ticks?")) return; S.done[year()] = {}; S.opened[year()] = {}; save(); close(); home(); toast("All the doors are closed again."); return; }
     if (a === "backup") { var bl = new Blob([JSON.stringify(S, null, 1)], { type: "application/json" }), u = URL.createObjectURL(bl), l = document.createElement("a"); l.href = u; l.download = "advent-calendar-backup.json"; document.body.appendChild(l); l.click(); l.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); return; }
     if (a === "no-install") { flag("noInstall"); home(); return; }
@@ -191,6 +203,7 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
   });
   document.addEventListener("change", function (e) {
     if (e.target.id === "s-name") { S.name = e.target.value.trim(); save(); home(); }
+    if (e.target.id === "restore" && SY) { toast("Leave the sample first, then restore."); return; }
     if (e.target.id === "restore" && e.target.files[0]) { var r = new FileReader(); r.onload = function () { try { var x = JSON.parse(r.result); if (!x || !x.set) throw 0; S = x; save(); close(); render(); toast("Backup restored."); } catch (er) { toast("That file is not a calendar backup."); } }; r.readAsText(e.target.files[0]); }
   });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") { close(); if (S) home(); } });
@@ -198,7 +211,7 @@ header.top b{font-weight:700;font-size:17px}header.top .sp{flex:1}
   window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); window.__bip = e; });
   window.addEventListener("appinstalled", function () { flag("installed"); });
   window.__adv = { state: function () { return S; }, render: render };
-  render();
+  tidy(); render();
   if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
     var hadSW = !!navigator.serviceWorker.controller, reloaded = false;
     navigator.serviceWorker.addEventListener("controllerchange", function () { if (hadSW && !reloaded) { reloaded = true; location.reload(); } });
